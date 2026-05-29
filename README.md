@@ -1,4 +1,4 @@
-# 🍎 App Store Reviews Exporter
+# 🍎 App Store Reviews Exporter DUOLINGO
 
 A Streamlit-based tool for collecting and exporting Apple App Store reviews into a structured CSV format for analysis.
 
