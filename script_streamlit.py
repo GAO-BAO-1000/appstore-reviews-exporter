@@ -4,7 +4,7 @@ import pandas as pd
 import time
 from io import StringIO
 
-st.title("🍎 App Store Reviews Exporter")
+st.title("🍎 App Store Reviews Exporter (DUOLINGO)")
 st.write("Collect and export App Store reviews to CSV")
 st.caption("Built by @GAO-BAO-1000 | Data Tool for App Analytics")
 
