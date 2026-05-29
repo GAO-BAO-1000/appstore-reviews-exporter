@@ -1,12 +1,12 @@
-import streamlit as st
+# =========================
+# Google Colab: Apple Reviews Collector (ALL TIME)
+# =========================
+
+!pip -q install requests pandas
+
 import requests
 import pandas as pd
 import time
-from io import StringIO
-
-st.title("🍎 App Store Reviews Exporter")
-st.write("Collect and export App Store reviews to CSV")
-st.caption("Built by @GAO-BAO-1000 | Data Tool for App Analytics")
 
 # -------------------------
 # Helpers
@@ -17,13 +17,15 @@ def fetch_reviews(app_id, page=1, country="us"):
     if country:
         url += f"?cc={country}"
 
+    print(f"[INFO] Fetching page {page}")
+
     try:
         r = requests.get(url, timeout=30)
         if r.status_code != 200:
             return None
         return r.json()
     except Exception as e:
-        st.error(f"Request error: {e}")
+        print(f"[ERROR] {e}")
         return None
 
 
@@ -36,11 +38,11 @@ def safe_get(entry, path, default=None):
         return default
 
 
-def parse_review(entry, app_id, country, source_url, app_name):
+def parse_review(entry, app_id, country, source_url):
     return {
         "review_id": safe_get(entry, ["id", "label"]),
         "app_id": app_id,
-        "app_name": app_name,
+        "app_name": None,
         "country": country,
         "author_name": safe_get(entry, ["author", "name", "label"]),
         "rating": safe_get(entry, ["im:rating", "label"]),
@@ -53,9 +55,10 @@ def parse_review(entry, app_id, country, source_url, app_name):
     }
 
 
-def collect_all_reviews(app_id, country="us", progress_bar=None, status=None):
+def collect_all_reviews(app_id, country="us"):
     results = []
     seen = set()
+
     page = 1
 
     while True:
@@ -66,7 +69,9 @@ def collect_all_reviews(app_id, country="us", progress_bar=None, status=None):
         feed = data.get("feed", {})
         entries = feed.get("entry", [])
 
+        # first item is usually app metadata, skip non-list pages
         if not isinstance(entries, list) or len(entries) == 0:
+            print("[INFO] No more data, stopping.")
             break
 
         app_name = safe_get(feed, ["title", "label"], None)
@@ -78,9 +83,10 @@ def collect_all_reviews(app_id, country="us", progress_bar=None, status=None):
                 e,
                 app_id,
                 country,
-                f"https://itunes.apple.com/rss/customerreviews/page={page}/id={app_id}/sortby=mostrecent/json",
-                app_name
+                f"https://itunes.apple.com/rss/customerreviews/page={page}/id={app_id}/sortby=mostrecent/json"
             )
+
+            r["app_name"] = app_name
 
             rid = r["review_id"]
             if not rid or rid in seen:
@@ -90,19 +96,17 @@ def collect_all_reviews(app_id, country="us", progress_bar=None, status=None):
             results.append(r)
             new_data += 1
 
-        if status:
-            status.write(f"Page {page} → +{new_data} reviews (total {len(results)})")
-
-        if progress_bar:
-            progress_bar.progress(min(page / 10, 1.0))  # приблизительный прогресс
+        print(f"[INFO] Page {page} -> +{new_data} reviews (total {len(results)})")
 
         if new_data == 0:
+            print("[INFO] No new reviews found, stopping.")
             break
 
         page += 1
         time.sleep(0.5)
 
     df = pd.DataFrame(results)
+
     if not df.empty:
         df = df.drop_duplicates(subset=["review_id"])
 
@@ -110,39 +114,30 @@ def collect_all_reviews(app_id, country="us", progress_bar=None, status=None):
 
 
 # -------------------------
-# STREAMLIT UI
+# USER INPUT
 # -------------------------
 
-st.title("🍎 Apple App Store Reviews Collector (All Time)")
+app_id = int(input("Enter App ID: "))
+country = input("Country code (default us): ") or "us"
 
-app_id = st.text_input("Enter App ID", "")
-country = st.text_input("Country code", "us")
+# -------------------------
+# RUN
+# -------------------------
 
-start = st.button("Start scraping")
+df = collect_all_reviews(app_id, country)
 
-if start:
-    if not app_id.isdigit():
-        st.error("App ID must be numeric")
-    else:
-        app_id = int(app_id)
+file_name = f"app_{app_id}_ALL_reviews.csv"
+df.to_csv(file_name, index=False)
 
-        progress = st.progress(0)
-        status = st.empty()
+print("\n=========================")
+print(f"[DONE] CSV saved: {file_name}")
+print(f"[DONE] Total reviews: {len(df)}")
+print("=========================\n")
 
-        df = collect_all_reviews(app_id, country, progress, status)
+display(df.head())
 
-        st.success(f"Done! Total reviews: {len(df)}")
-
-        st.dataframe(df)
-
-        # -------------------------
-        # CSV download
-        # -------------------------
-        csv = df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=f"app_{app_id}_reviews.csv",
-            mime="text/csv"
-        )
+# -------------------------
+# Download (Colab)
+# -------------------------
+from google.colab import files
+files.download(file_name)
